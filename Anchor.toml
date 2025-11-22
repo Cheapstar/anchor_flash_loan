@@ -1,12 +1,13 @@
 [toolchain]
 package_manager = "yarn"
+anchor_version = "0.32.0"
 
 [features]
 resolution = true
 skip-lint = false
 
 [programs.localnet]
-blueshift_anchor_flash_loan = "3iC2nNDQF52E2k2cHrtVKYZ7hoAgrTH7bftzxm1EmuJR"
+anchor_flash_loan = "22222222222222222222222222222222222222222222"
 
 [registry]
 url = "https://api.apr.dev"

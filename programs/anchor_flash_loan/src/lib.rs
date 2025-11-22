@@ -5,7 +5,7 @@ use anchor_spl::{
 use anchor_lang::solana_program::sysvar::instructions::{load_instruction_at_checked, ID as INSTRUCTIONS_SYSVAR_ID};
 use anchor_lang;
 
-declare_id!("3iC2nNDQF52E2k2cHrtVKYZ7hoAgrTH7bftzxm1EmuJR");
+declare_id!("22222222222222222222222222222222222222222222");
 
 #[program]
 pub mod flash_loan {
@@ -14,7 +14,7 @@ pub mod flash_loan {
 
     use super::*;
 
-    pub fn loan(ctx: Context<Loan>,borrow_amount:u64) -> Result<()> {
+    pub fn borrow(ctx: Context<Loan>,borrow_amount:u64) -> Result<()> {
         
         require!(borrow_amount > 0,ProtocolError::InvalidAmount);
         // humara program token transfer instruction bhejega toh seeds are needed to sign
@@ -63,6 +63,48 @@ pub mod flash_loan {
     }
 
     pub fn repay(ctx: Context<Loan>) -> Result<()> {
+
+        /*
+            Ek toh we need the "amount" from loan Ix 
+            and check that we have a loan Ix
+
+            So yaha pe pehle checking hogi
+         */
+
+         let ixs = ctx.accounts.instructions.to_account_info();
+
+         let current_index = load_current_index_checked(&ixs)?;
+
+         let instruction_sysvar = ixs.try_borrow_data()?;
+         let len = u16::from_le_bytes(instruction_sysvar[0..2].try_into().unwrap());
+
+
+         let mut amount_borrowed:u64;
+
+         if let Ok(borrow_ix) = load_instruction_at_checked(0, &ixs) {
+
+            require_keys_eq!(borrow_ix.program_id,ID,ProtocolError::InvalidProgram);
+
+            let mut borrowed_data: [u8;8] = [0u8;8];
+            borrowed_data.copy_from_slice(&borrow_ix.data[8..16]);
+            amount_borrowed = u64::from_le_bytes(borrowed_data);     
+        }
+         else {
+            return Err(ProtocolError::MissingBorrowIx.into());
+         }
+
+
+
+         transfer(CpiContext::new(
+            ctx.accounts.token_program.to_account_info(), 
+                Transfer{
+                    from:ctx.accounts.borrower_ata.to_account_info(),
+                    to:ctx.accounts.protocol_ata.to_account_info(),
+                    authority:ctx.accounts.borrower.to_account_info()
+                }), amount_borrowed)?;
+
+
+
         Ok(())
     }
 }
@@ -112,6 +154,8 @@ pub enum ProtocolError {
     #[msg("Invalid Protocol ATA")]
     InvalidProtocolAta,
     #[msg("Missing Repay Instruction")]
-    MissingRepayIx
+    MissingRepayIx,
+    #[msg("Missing Borrow Instruction")]
+    MissingBorrowIx
     
 }
