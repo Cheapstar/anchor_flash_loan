@@ -5,7 +5,7 @@ use anchor_spl::{
 use anchor_lang::solana_program::sysvar::instructions::{load_instruction_at_checked, ID as INSTRUCTIONS_SYSVAR_ID};
 use anchor_lang;
 
-declare_id!("22222222222222222222222222222222222222222222");
+declare_id!("EWAgQvYgjVSHnKpdcDUvkVVnPgttURFFMrJUiKEg73WJ");
 
 #[program]
 pub mod flash_loan {
