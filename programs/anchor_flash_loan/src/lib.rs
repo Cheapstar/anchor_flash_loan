@@ -16,6 +16,7 @@ pub mod flash_loan {
 
     pub fn borrow(ctx: Context<Loan>,borrow_amount:u64) -> Result<()> {
         
+        msg!("Borrow Instruction Received");
         require!(borrow_amount > 0,ProtocolError::InvalidAmount);
         // humara program token transfer instruction bhejega toh seeds are needed to sign
         
