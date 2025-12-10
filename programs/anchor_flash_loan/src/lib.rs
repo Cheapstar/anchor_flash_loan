@@ -95,7 +95,9 @@ pub mod flash_loan {
          else {
             return Err(ProtocolError::MissingBorrowIx.into());
          }
-        let fee = (amount_borrowed as u128).checked_mul(500).unwrap().checked_div(10_000).ok_or(ProtocolError::Overflow)? as u64;
+
+        // for testing i am making fee as 0
+        let fee = (amount_borrowed as u128).checked_mul(0).unwrap().checked_div(10_000).ok_or(ProtocolError::Overflow)? as u64;
         amount_borrowed = amount_borrowed.checked_add(fee).ok_or(ProtocolError::Overflow)?;
 
 
@@ -149,6 +151,7 @@ pub struct Loan<'info> {
     )]
     pub borrower_ata:Account<'info,TokenAccount>,
     #[account(
+        mut,
         associated_token::mint = mint,
         associated_token::authority = protocol,
     )]

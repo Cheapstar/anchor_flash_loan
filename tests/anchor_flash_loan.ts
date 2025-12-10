@@ -5,6 +5,7 @@ import { FlashLoan } from "../target/types/flash_loan";
 import {
   createAssociatedTokenAccountInstruction,
   createMint,
+  getAccount,
   getAssociatedTokenAddress,
   mintTo,
   TOKEN_PROGRAM_ID,
@@ -12,11 +13,14 @@ import {
 import {
   Keypair,
   PublicKey,
+  sendAndConfirmTransaction,
   SystemProgram,
   SYSVAR_INSTRUCTIONS_PUBKEY,
+  Transaction,
 } from "@solana/web3.js";
 import { ASSOCIATED_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/utils/token";
 import { SYSTEM_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/native/system";
+import { expect } from "chai";
 
 describe("test", () => {
   // Configure the client to use the local cluster.
@@ -49,15 +53,6 @@ describe("test", () => {
       [Buffer.from("protocol")],
       program.programId
     );
-
-    await program.methods
-      .initialize()
-      .accounts({
-        protocol: protocol,
-        payer: provider.wallet.publicKey,
-        systemProgram: system_program,
-      })
-      .rpc();
 
     // Creating Mint
     mint = await createMint(
@@ -112,5 +107,62 @@ describe("test", () => {
     // 2. Create Repay Instruction
     // order should be that borrow is the first
     // and repay has to the the last
+    console.log("Protocol : ", protocol.toString());
+    console.log("Borrower : ", borrower.publicKey.toString());
+    console.log("BorrowerAta : ", borrower_ata.toString());
+    console.log("ProtocolAta : ", protocol_ata.toString());
+
+    const protocol_ata_before = await getAccount(
+      provider.connection,
+      protocol_ata
+    );
+
+    const protocol_amount_before = Number(protocol_ata_before.amount);
+
+    const borrow_ix = await program.methods
+      .borrow(new anchor.BN(200))
+      .accounts({
+        borrower: borrower.publicKey,
+        protocol: protocol,
+        mint: mint,
+        borrowerAta: borrower_ata,
+        protocolAta: protocol_ata,
+        instructions: instructions,
+        tokenProgram: token_program,
+        associatedTokenProgram: associated_token_program,
+        systemProgram: system_program,
+      })
+      .signers([borrower])
+      .instruction();
+
+    const repay_ix = await program.methods
+      .repay()
+      .accounts({
+        borrower: borrower.publicKey,
+        protocol: protocol,
+        mint: mint,
+        borrowerAta: borrower_ata,
+        protocolAta: protocol_ata,
+        instructions: instructions,
+        tokenProgram: token_program,
+        associatedTokenProgram: associated_token_program,
+        systemProgram: system_program,
+      })
+      .signers([borrower])
+      .instruction();
+
+    const tx = new Transaction().add(borrow_ix, repay_ix);
+    const result = await sendAndConfirmTransaction(provider.connection, tx, [
+      borrower,
+    ]);
+
+    const protocol_ata_after = await getAccount(
+      provider.connection,
+      protocol_ata
+    );
+
+    const protocol_amount_after = Number(protocol_ata_before.amount);
+
+    expect(protocol_amount_after).to.equal(protocol_amount_before);
   });
 });
