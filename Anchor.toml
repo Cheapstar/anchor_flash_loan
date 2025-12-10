@@ -7,7 +7,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-anchor_flash_loan = "EWAgQvYgjVSHnKpdcDUvkVVnPgttURFFMrJUiKEg73WJ"
+anchor_flash_loan = "22222222222222222222222222222222222222222222"
 
 [registry]
 url = "https://api.apr.dev"

@@ -1,210 +1,116 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { FlashLoan } from "../target/types/flash_loan";
-import idl from "../target/idl/flash_loan.json";
 
 import {
-  ACCOUNT_SIZE,
-  AccountLayout,
+  createAssociatedTokenAccountInstruction,
+  createMint,
   getAssociatedTokenAddress,
-  MINT_SIZE,
-  MintLayout,
+  mintTo,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-
 import {
   Keypair,
   PublicKey,
   SystemProgram,
   SYSVAR_INSTRUCTIONS_PUBKEY,
-  Transaction,
 } from "@solana/web3.js";
-import { LiteSVM } from "litesvm";
-import { BN } from "bn.js";
-const programId = new PublicKey("EWAgQvYgjVSHnKpdcDUvkVVnPgttURFFMrJUiKEg73WJ");
-/*
-    pub borrower:Signer<'info>,    
-    pub protocol:SystemAccount<'info>,         
-    pub mint:Account<'info,Mint>,                
-    pub borrower_ata:Account<'info,TokenAccount>,
-    pub protocol_ata:Account<'info,TokenAccount>,
+import { ASSOCIATED_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/utils/token";
+import { SYSTEM_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/native/system";
 
-    /// CHECK: InstructionsSysvar account
-    pub instructions: UncheckedAccount<'info>,          
-    
-    pub token_program:Program<'info,Token>,
-    pub associated_token_program:Program<'info,AssociatedToken>,
-    pub system_program:Program<'info,System>,
- */
-describe("Does it Work or not", () => {
-  it("Work or not", async () => {
-    const svm = new LiteSVM();
-    const provider = anchor.AnchorProvider.local();
-    anchor.setProvider(provider);
+describe("test", () => {
+  // Configure the client to use the local cluster.
+  const provider = anchor.AnchorProvider.env();
+  anchor.setProvider(provider);
 
-    // loading the program into the environment , we know this
-    svm.addProgramFromFile(programId, "./target/deploy/anchor_flash_loan.so");
+  const program = anchor.workspace.flash_loan as Program<FlashLoan>;
 
-    // program Builder
-    const program = new anchor.Program<FlashLoan>(idl, provider);
+  let borrower: Keypair;
+  let protocol: PublicKey; // this is a PDA
+  let mint: PublicKey;
+  let borrower_ata: PublicKey;
+  let protocol_ata: PublicKey;
 
-    const tx = new Transaction();
+  let instructions: PublicKey = SYSVAR_INSTRUCTIONS_PUBKEY;
+  let token_program: PublicKey = TOKEN_PROGRAM_ID;
+  let associated_token_program: PublicKey = ASSOCIATED_PROGRAM_ID;
+  let system_program: PublicKey = SYSTEM_PROGRAM_ID;
 
-    tx.recentBlockhash = svm.latestBlockhash();
-
-    // create the user
-    let borrower = Keypair.generate();
-    // adding the account to the svm
-    svm.setAccount(borrower.publicKey, {
-      lamports: 100_000_000,
-      data: Buffer.alloc(0),
-      owner: SystemProgram.programId,
-      executable: false,
-    });
-
-    // creating the protocol
-    let seeds = new Uint8Array(Buffer.from("protocol"));
-    let [protocol, bump] = PublicKey.findProgramAddressSync([seeds], programId);
-    svm.setAccount(protocol, {
-      lamports: 100_000_000,
-      data: Buffer.alloc(0),
-      owner: SystemProgram.programId,
-      executable: false,
-    });
-
-    // creating the Mint
-    let mint = Keypair.generate();
-
-    let mintData = Buffer.alloc(MINT_SIZE);
-
-    // ye jhanjat isliye h kyunki you are doing it from scratch and in the litesSVM
-    MintLayout.encode(
-      {
-        mintAuthorityOption: 1,
-        mintAuthority: borrower.publicKey,
-        supply: BigInt(0),
-        decimals: 0,
-        isInitialized: true,
-        freezeAuthorityOption: 0,
-        freezeAuthority: PublicKey.default,
-      },
-      mintData
+  before(async () => {
+    // Creating Borrower
+    borrower = Keypair.generate();
+    await provider.connection.requestAirdrop(
+      borrower.publicKey,
+      10 * anchor.web3.LAMPORTS_PER_SOL
     );
 
-    const mintRent = svm.minimumBalanceForRentExemption(BigInt(MINT_SIZE));
-
-    svm.setAccount(mint.publicKey, {
-      lamports: Number(mintRent),
-      data: mintData,
-      owner: TOKEN_PROGRAM_ID,
-      executable: false,
-    });
-
-    // ab Ata's
-    const borrower_ata = await getAssociatedTokenAddress(
-      mint.publicKey,
-      borrower.publicKey
-    );
-    const tokenAccountData = Buffer.alloc(ACCOUNT_SIZE);
-    AccountLayout.encode(
-      {
-        mint: mint.publicKey,
-        owner: borrower.publicKey,
-        amount: BigInt(100),
-        delegateOption: 0,
-        delegate: PublicKey.default,
-        delegatedAmount: BigInt(0),
-        state: 1,
-        isNativeOption: 0,
-        isNative: BigInt(0),
-        closeAuthorityOption: 0,
-        closeAuthority: PublicKey.default,
-      },
-      tokenAccountData
+    // Creating The Protocol PDA Ix
+    [protocol] = PublicKey.findProgramAddressSync(
+      [Buffer.from("protocol")],
+      program.programId
     );
 
-    const tokenRent = svm.minimumBalanceForRentExemption(BigInt(ACCOUNT_SIZE));
-
-    svm.setAccount(borrower_ata, {
-      lamports: Number(tokenRent),
-      data: tokenAccountData,
-      owner: TOKEN_PROGRAM_ID,
-      executable: false,
-    });
-
-    // protocol_ata
-    const protocol_ata = await getAssociatedTokenAddress(
-      mint.publicKey,
-      protocol,
-      true
-    );
-    AccountLayout.encode(
-      {
-        mint: mint.publicKey,
-        owner: protocol,
-        amount: BigInt(100_000_000),
-        delegateOption: 0,
-        delegate: PublicKey.default,
-        delegatedAmount: BigInt(0),
-        state: 1,
-        isNativeOption: 0,
-        isNative: BigInt(0),
-        closeAuthorityOption: 0,
-        closeAuthority: PublicKey.default,
-      },
-      tokenAccountData
-    );
-
-    svm.setAccount(protocol_ata, {
-      lamports: Number(tokenRent),
-      data: tokenAccountData,
-      owner: TOKEN_PROGRAM_ID,
-      executable: false,
-    });
-
-    // getting the instruction sysvar
-    svm.withSysvars();
-
-    // let's send the instruction and check
-    const borrow_amount = new BN(100_00);
-    let borrow_ix = await program.methods
-      .borrow(borrow_amount)
+    await program.methods
+      .initialize()
       .accounts({
-        borrower: borrower.publicKey,
         protocol: protocol,
-        mint: mint.publicKey,
-        borrowerAta: borrower_ata,
-        protocolAta: protocol_ata,
-        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
+        payer: provider.wallet.publicKey,
+        systemProgram: system_program,
       })
-      .instruction();
+      .rpc();
 
-    tx.add(borrow_ix);
+    // Creating Mint
+    mint = await createMint(
+      provider.connection,
+      provider.wallet.payer,
+      provider.wallet.publicKey,
+      null,
+      6
+    );
 
-    let repay_ix = await program.methods
-      .repay()
-      .accounts({
-        borrower: borrower.publicKey,
-        protocol: protocol,
-        mint: mint.publicKey,
-        borrowerAta: borrower_ata,
-        protocolAta: protocol_ata,
-        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      })
-      .instruction();
+    // Creating Token ATA for borrower
+    borrower_ata = await getAssociatedTokenAddress(mint, borrower.publicKey);
+    const borrower_ata_tx = new anchor.web3.Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        provider.wallet.publicKey,
+        borrower_ata,
+        borrower.publicKey,
+        mint
+      )
+    );
 
-    tx.add(repay_ix);
+    await provider.sendAndConfirm(borrower_ata_tx, [provider.wallet.payer]);
+    // Creating Protocol
+    protocol_ata = await getAssociatedTokenAddress(mint, protocol, true);
 
-    tx.sign(borrower);
+    const protocol_ata_tx = new anchor.web3.Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        provider.wallet.publicKey,
+        protocol_ata,
+        protocol,
+        mint
+      )
+    );
 
-    const result = svm.sendTransaction(tx);
+    await provider.sendAndConfirm(protocol_ata_tx, [provider.wallet.payer]);
 
-    console.log(result.toString());
+    // Accounts Setup Done
+
+    // mint some tokens to protocol ata
+    await mintTo(
+      provider.connection,
+      provider.wallet.payer,
+      mint,
+      protocol_ata,
+      provider.wallet.payer,
+      400
+    );
+  });
+
+  it("Program Works Correctly", async () => {
+    // 1. Create Borrow Instruction
+    // 2. Create Repay Instruction
+    // order should be that borrow is the first
+    // and repay has to the the last
   });
 });

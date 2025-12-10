@@ -1,18 +1,23 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken, token::{Mint, Token, TokenAccount,transfer}
+    associated_token::AssociatedToken, token::{Mint, Token, TokenAccount,Transfer,transfer}
 };
 use anchor_lang::solana_program::sysvar::instructions::{load_instruction_at_checked, ID as INSTRUCTIONS_SYSVAR_ID};
 use anchor_lang;
 
-declare_id!("EWAgQvYgjVSHnKpdcDUvkVVnPgttURFFMrJUiKEg73WJ");
+declare_id!("22222222222222222222222222222222222222222222");
 
 #[program]
 pub mod flash_loan {
+
+
     use anchor_lang::prelude::sysvar::instructions::load_current_index_checked;
-    use anchor_spl::token::{self, Transfer};
 
     use super::*;
+
+    pub fn initialize(ctx:Context<Initialize>)->Result<()> {
+        Ok(())
+    }
 
     pub fn borrow(ctx: Context<Loan>,borrow_amount:u64) -> Result<()> {
         
@@ -20,10 +25,7 @@ pub mod flash_loan {
         require!(borrow_amount > 0,ProtocolError::InvalidAmount);
         // humara program token transfer instruction bhejega toh seeds are needed to sign
         
-        let seeds = &[
-                    b"protocol".as_ref(),
-                    &[ctx.bumps.protocol]
-                ];
+        let seeds = &[b"protocol".as_ref(), &[ctx.bumps.protocol]];
         
         let signer_seeds = &[&seeds[..]];
 
@@ -93,7 +95,8 @@ pub mod flash_loan {
          else {
             return Err(ProtocolError::MissingBorrowIx.into());
          }
-
+        let fee = (amount_borrowed as u128).checked_mul(500).unwrap().checked_div(10_000).ok_or(ProtocolError::Overflow)? as u64;
+        amount_borrowed = amount_borrowed.checked_add(fee).ok_or(ProtocolError::Overflow)?;
 
 
          transfer(CpiContext::new(
@@ -102,12 +105,30 @@ pub mod flash_loan {
                     from:ctx.accounts.borrower_ata.to_account_info(),
                     to:ctx.accounts.protocol_ata.to_account_info(),
                     authority:ctx.accounts.borrower.to_account_info()
-                }), amount_borrowed)?;
+                }), amount_borrowed
+            )?;
 
 
 
         Ok(())
     }
+}
+
+
+#[derive(Accounts)]
+pub struct Initialize<'info> {
+    #[account(
+        init,
+        seeds = [b"protocol"],
+        bump,
+        payer = payer,
+        space = 8
+    )]
+    protocol:Account<'info,Protocol>,
+    #[account(mut)]
+    payer:Signer<'info>,
+    system_program:Program<'info,System>
+
 }
 
 #[derive(Accounts)]
@@ -141,6 +162,10 @@ pub struct Loan<'info> {
     pub system_program:Program<'info,System>,
 }
 
+#[account]
+pub struct Protocol {
+
+}
 
 #[error_code]
 pub enum ProtocolError {
@@ -157,6 +182,8 @@ pub enum ProtocolError {
     #[msg("Missing Repay Instruction")]
     MissingRepayIx,
     #[msg("Missing Borrow Instruction")]
-    MissingBorrowIx
+    MissingBorrowIx,
+    #[msg("Overflow")]
+    Overflow,
     
 }
